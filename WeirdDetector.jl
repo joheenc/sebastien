@@ -4,7 +4,7 @@ using Interpolations
 using DataFrames
 using FITSIO
 
-export Point, periodogram, aliases
+export Point, periodogram, aliases, optimal_periods, getFITS, loadFITS
 
 struct Point 
     t :: Float32
@@ -127,7 +127,7 @@ end
 
 "returns dataframe containing chi-squared and kurtosis by period"
 function periodogram(data::Vector{Point}, periods::Vector{Float32}, kw=0.002f0; 
-                     parallel=true, datakw=false)
+                     parallel=true, datakw=false, postprocess=true)
     df = DataFrame(chi2=Float32[], kurtosis=Float32[])
     s = div(length(periods), nworkers()*3)
     results = pmap(periods, distributed=parallel, batch_size=s) do p

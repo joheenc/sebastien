@@ -8,11 +8,11 @@ This code is tested with Julia 1.0, but it should be compatible with 0.6 as well
 
 Here is a brief usage example
 
-    include("WeirdDetector")
-    using WeirdDetector #make key functions accessible without being qualified
+    push!(LOAD_PATH, "/directory/containing/this/code")
+    using WeirdDetector
     
     #here's how you can get a Kepler light curve detrended like we did in the paper
-    getFITS(8462852, fitsdir="./") #download FITS files for Boyajian's star
+    getFITS(8462852, fitsdir="./") #download FITS files for Boyajian's star to the current directory
     df = loadFITS(8462852, fitsdir="./") #load all quarters into single data frame, perform ourlier rejection and detrending
     data = pointsify(df) #convert to data type taken by periodogram()
 
@@ -27,4 +27,16 @@ Here is a brief usage example
                                                        #if you want to parallelize, start Julia with "julia -n <number of cores>"
     
     #do some postprocessing 
+    output[:delt_chi2] = flatten(output[:chi2], periods) #calculate \Delta \chi^2 (see equation N)
+
+    null_output = scrambled_periodogram(data, periods)
+    null_output[:delt_chi2] = flatten(null_output[:chi2], periods)
+    sigma = movingstd((null_output[:kurtosis] .- 3) .* (null_output[:delt_chi2])
+
+    output[:zeta] = (output[:kurtosis] .- 3) .* output[:delt_chi2] ./ sigma
+
+    #plot the periodogram
+    using PyPlot
+    plot(periods, output[:zeta])
+
     
