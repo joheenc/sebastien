@@ -1,4 +1,4 @@
-This code implements the algorithm in [Wheeler & Kipping 201?]().  Find posterior samples from the paper at [github link tk]().
+This code implements the algorithm in [Wheeler & Kipping 201?]().  Find posterior samples from the paper at [github.com/ajwheeler/WDdata](https://github.com/ajwheeler/WDdata).
 
 This code is tested with Julia 1.0, but it should be compatible with 0.6 as well.  It requires the `Interpolations`, `DataFrames`, and `FITSIO` packages.  To install them run these commands on the Julia REPL
 
