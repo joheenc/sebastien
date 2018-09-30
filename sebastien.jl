@@ -16,6 +16,18 @@ end
 Point(t::Real, F::Real, sigmaF::Real) = Point(Float32(t), NaN, Float32(F), Float32(sigmaF), NaN)
 Point(t::Real, F::Real) = Point(t, F, 5f-5)
 
+"""
+convert a DataFrame in the format returned by `loadFITS`
+to an array of `Points`
+"""
+function pointsify(df; keep_interpolated::Bool=false) :: Vector{Point}
+    if keep_interpolated
+        df[df[:interpolated] .== true, :sigmaF] = mean(df[df[:interpolated] .== false, :sigmaF])
+    else
+        df = df[df[:interpolated] .== false, :]
+    end
+    Point.((df[:t]), (df[:F]), (df[:sigmaF]))
+
 function fold!(period::Float32, data::Array{Point})
     for (i,p) in enumerate(data)
         data[i] = Point(p.t, p.t%period, p.F, p.sigmaF, p.smoothedF)
