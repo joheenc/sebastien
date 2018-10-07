@@ -3,8 +3,9 @@ module WeirdDetector
 using Interpolations
 using DataFrames
 using FITSIO
+using Optim
 
-export Point, periodogram, aliases, optimal_periods, getFITS, loadFITS
+export Point, periodogram, aliases, optimal_periods, getFITS, loadFITS, pointsify, flatten, scrambled_periodogram, movingstd
 
 struct Point 
     t :: Float32
@@ -27,6 +28,7 @@ function pointsify(df; keep_interpolated::Bool=false) :: Vector{Point}
         df = df[df[:interpolated] .== false, :]
     end
     Point.((df[:t]), (df[:F]), (df[:sigmaF]))
+end
 
 function fold!(period::Float32, data::Array{Point})
     for (i,p) in enumerate(data)
@@ -124,7 +126,8 @@ function chi2(data::Vector{Point}) :: Float32
 end
 
 "fold, smooth, and calculate reduced chi squared"
-function chi2(data::Vector{Point}, period::Float32; kw::Float32=0.002f0)
+function chi2(data::Vector{Point}, period::Float32
+        kw::Float32=0.002f0)
     fold!(period, data)
     smooth!(data, period, kw)
     chi2(data)
@@ -138,7 +141,7 @@ function kurtosis(data::Vector{Point}) :: Float32
 end
 
 "returns dataframe containing chi-squared and kurtosis by period"
-function periodogram(data::Vector{Point}, periods::Vector{Float32}, kw=0.002f0; 
+function periodogram(data::Vector{Point}, periods::Vector{Float32}; kw=0.002f0, 
                      parallel=true, datakw=false, postprocess=true)
     df = DataFrame(chi2=Float32[], kurtosis=Float32[])
     s = div(length(periods), nworkers()*3)
@@ -175,7 +178,7 @@ function aliases(downto::Int=5; upperBound=nothing) :: Vector{Rational}
     collect(lines)
 end
 
-function flatten(periods::Vector{Float32}, chi2s::Vector{Float32}, stepwidth::Float32=10.21f0;
+function flatten(periods::Vector{Float32}, chi2s::Vector{Float32}; stepwidth::Float32=10.21f0,
                  preflipped=false)
     nchi2s = similar(chi2s)
     steps = Int(ceil(periods[end]/stepwidth))
@@ -217,7 +220,7 @@ function scrambled_periodogram(df::DataFrame, periods::Vector{Float32}; kwargs..
     periodogram(data, periods; kwargs...)
 end
 
-function optimal_periods(pmin=0.25f0, pmax=5f1; n=5)
+function optimal_periods(;pmin=0.25f0, pmax=5f1, n=5)
     pmin = Float32(pmin)
     pmax = Float32(pmax)
    exp.((log(pmin) : (0.001f0/n) : log(pmax))) 
