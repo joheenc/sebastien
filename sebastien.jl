@@ -126,8 +126,7 @@ function chi2(data::Vector{Point}) :: Float32
 end
 
 "fold, smooth, and calculate reduced chi squared"
-function chi2(data::Vector{Point}, period::Float32
-        kw::Float32=0.002f0)
+function chi2(data::Vector{Point}, period::Float32; kw::Float32=0.002f0)
     fold!(period, data)
     smooth!(data, period, kw)
     chi2(data)
