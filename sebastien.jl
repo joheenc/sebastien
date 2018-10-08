@@ -42,7 +42,7 @@ function access(data::Vector{A}, i::Int) :: A where A
     npoints = length(data)
     j = mod(i,npoints) == 0 ? npoints : mod(i,npoints)
     data[j] 
-endop
+end
 
 "helper function for smoothing"
 function wrappedtime(data::Vector{Point}, i::Int, P::Float32) :: Float32
