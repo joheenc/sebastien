@@ -3,8 +3,9 @@ module WeirdDetector
 using Interpolations
 using DataFrames
 using FITSIO
+using Optim
 
-export Point, periodogram, aliases, optimal_periods, getFITS, loadFITS
+export Point, periodogram, aliases, optimal_periods, getFITS, loadFITS, pointsify, flatten, scrambled_periodogram, movingstd
 
 struct Point 
     t :: Float32
@@ -27,6 +28,7 @@ function pointsify(df; keep_interpolated::Bool=false) :: Vector{Point}
         df = df[df[:interpolated] .== false, :]
     end
     Point.((df[:t]), (df[:F]), (df[:sigmaF]))
+end
 
 function fold!(period::Float32, data::Array{Point})
     for (i,p) in enumerate(data)
