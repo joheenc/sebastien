@@ -42,7 +42,7 @@ function access(data::Vector{A}, i::Int) :: A where A
     npoints = length(data)
     j = mod(i,npoints) == 0 ? npoints : mod(i,npoints)
     data[j] 
-end
+endop
 
 "helper function for smoothing"
 function wrappedtime(data::Vector{Point}, i::Int, P::Float32) :: Float32
@@ -140,7 +140,7 @@ function kurtosis(data::Vector{Point}) :: Float32
 end
 
 "returns dataframe containing chi-squared and kurtosis by period"
-function periodogram(data::Vector{Point}, periods::Vector{Float32}; kw=0.002f0, 
+function periodogram(data::Vector{Point}, periods::Vector{Float32}, kw=0.002f0; 
                      parallel=true, datakw=false, postprocess=true)
     df = DataFrame(chi2=Float32[], kurtosis=Float32[])
     s = div(length(periods), nworkers()*3)
@@ -177,7 +177,7 @@ function aliases(downto::Int=5; upperBound=nothing) :: Vector{Rational}
     collect(lines)
 end
 
-function flatten(periods::Vector{Float32}, chi2s::Vector{Float32}; stepwidth::Float32=10.21f0,
+function flatten(periods::Vector{Float32}, chi2s::Vector{Float32}, stepwidth::Float32=10.21f0;
                  preflipped=false)
     nchi2s = similar(chi2s)
     steps = Int(ceil(periods[end]/stepwidth))
@@ -219,7 +219,7 @@ function scrambled_periodogram(df::DataFrame, periods::Vector{Float32}; kwargs..
     periodogram(data, periods; kwargs...)
 end
 
-function optimal_periods(;pmin=0.25f0, pmax=5f1, n=5)
+function optimal_periods(pmin=0.25f0, pmax=5f1; n=5)
     pmin = Float32(pmin)
     pmax = Float32(pmax)
    exp.((log(pmin) : (0.001f0/n) : log(pmax))) 
