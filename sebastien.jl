@@ -5,7 +5,7 @@ using DataFrames
 using FITSIO
 using Optim
 
-export Point, periodogram, aliases, optimal_periods, getFITS, loadFITS, pointsify, flatten, scrambled_periodogram, movingstd
+export Point, periodogram, aliases, loguniform_grid, getFITS, loadFITS, pointsify, flatten, scrambled_periodogram, movingstd
 
 struct Point 
     t :: Float32
@@ -79,7 +79,7 @@ function smooth2!(data::Vector{Point}, P::Float32, kw::Float32)
         sumInverseSigma += 1e0 / point.sigmaF
 
         data[i] = Point(data[i].t, data[i].modt, data[i].F, data[i].sigmaF, 
-                        Float32(sumFoverSigma/sumInverseSigma), kw)
+                        Float32(sumFoverSigma/sumInverseSigma))
     end 
     kw
 end
@@ -111,9 +111,8 @@ function smooth!(data::Vector{Point}, P::Float32, kw::Float32)
             sumInverseSigma += 1e0 / point.sigmaF
         end 
         data[i] = Point(data[i].t, data[i].modt, data[i].F, data[i].sigmaF, 
-                        Float32(sumFoverSigma/sumInverseSigma), ub-lb+1)
-    end 
-    mean((x->x.kw).(data)) 
+                        Float32(sumFoverSigma/sumInverseSigma))
+    end
 end
 
 "calculate reduced chi squared on data that has already been folded and smoothed"
@@ -219,7 +218,7 @@ function scrambled_periodogram(df::DataFrame, periods::Vector{Float32}; kwargs..
     periodogram(data, periods; kwargs...)
 end
 
-function optimal_periods(pmin=0.25f0, pmax=5f1; n=5)
+function loguniform_grid(pmin=0.25f0, pmax=5f1; n=5)
     pmin = Float32(pmin)
     pmax = Float32(pmax)
    exp.((log(pmin) : (0.001f0/n) : log(pmax))) 
@@ -227,9 +226,13 @@ end
 
 "download FITS data for KIC"
 getFITS(KIC::Int; fitsdir="fitsfiles/") = getFITS(lpad(KIC,9,0); fitsdir=fitsdir)
-function getFITS(KIC::String; fitsdir="fitsfiles/", force=false)
-    #info("Dowloading data for KIC $(KIC)")
-    ftpfolder = "http://archive.stsci.edu/pub/kepler/lightcurves//" * KIC[1:4] * "/" * KIC * "/"
+function getFITS(KIC::String; fitsdir="fitsfiles/", force=false, TID="")
+    if TID == ""
+        #info("Dowloading data for KIC $(KIC)")
+        ftpfolder = "http://archive.stsci.edu/pub/kepler/lightcurves//" * KIC[1:4] * "/" * KIC * "/"
+    else
+        ftpfolder = "http://archive.stsci.edu/missions/tess/ete-6/tid/00/000/00" * TID[1:1] * "/" * TID[2:4]
+    end
     command = `wget -P $fitsdir -nH --cut-dirs=6 -r -c -N -np -q -R '*.tar' -R 'index*' -erobots=off $ftpfolder`
     run(command)
 end
