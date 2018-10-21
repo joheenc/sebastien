@@ -5,9 +5,9 @@ using DataFrames
 using FITSIO
 using Optim
 
-export Point, periodogram, aliases, loguniform_grid, getFITS, loadFITS, pointsify, flatten, scrambled_periodogram, movingstd
+export Point, periodogram, aliases, optimal_periods, getFITS, loadFITS, pointsify, flatten, scrambled_periodogram, movingstd
 
-struct Point 
+struct Point
     t :: Float32
     modt :: Float32
     F :: Float32
@@ -21,11 +21,13 @@ Point(t::Real, F::Real) = Point(t, F, 5f-5)
 convert a DataFrame in the format returned by `loadFITS`
 to an array of `Points`
 """
-function pointsify(df; keep_interpolated::Bool=false) :: Vector{Point}
-    if keep_interpolated
-        df[df[:interpolated] .== true, :sigmaF] = mean(df[df[:interpolated] .== false, :sigmaF])
-    else
-        df = df[df[:interpolated] .== false, :]
+function pointsify(df; keep_interpolated::Bool=false, tess::Bool=false) :: Vector{Point}
+    if !tess
+        if keep_interpolated
+            df[df[:interpolated] .== true, :sigmaF] = mean(df[df[:interpolated] .== false, :sigmaF])
+        else
+            df = df[df[:interpolated] .== false, :]
+        end
     end
     Point.((df[:t]), (df[:F]), (df[:sigmaF]))
 end
@@ -41,7 +43,7 @@ end
 function access(data::Vector{A}, i::Int) :: A where A
     npoints = length(data)
     j = mod(i,npoints) == 0 ? npoints : mod(i,npoints)
-    data[j] 
+    data[j]
 end
 
 "helper function for smoothing"
@@ -52,10 +54,12 @@ function wrappedtime(data::Vector{Point}, i::Int, P::Float32) :: Float32
         return modt - P
     elseif i > npoints
         return modt + P
-    else 
+    else
         return modt
     end
 end
+
+
 
 function smooth2!(data::Vector{Point}, P::Float32, kw::Float32)
     kw = Int(round(kw * length(data)))
@@ -66,7 +70,7 @@ function smooth2!(data::Vector{Point}, P::Float32, kw::Float32)
     sumFoverSigma = sum(first.(s))
     sumInverseSigma = sum(last.(s))
     lb = -kw
-    ub = kw 
+    ub = kw
     for i = 1:length(data)
         point = access(data, lb)
         sumFoverSigma -= point.F / point.sigmaF
@@ -78,19 +82,18 @@ function smooth2!(data::Vector{Point}, P::Float32, kw::Float32)
         sumFoverSigma += point.F / point.sigmaF
         sumInverseSigma += 1e0 / point.sigmaF
 
-        data[i] = Point(data[i].t, data[i].modt, data[i].F, data[i].sigmaF, 
+        data[i] = Point(data[i].t, data[i].modt, data[i].F, data[i].sigmaF,
                         Float32(sumFoverSigma/sumInverseSigma))
-    end 
-    kw
+    end
 end
 
 "smooth the data with a rolling mean"
 function smooth!(data::Vector{Point}, P::Float32, kw::Float32)
     kw = kw * P
-    sumFoverSigma = 0e0 
-    sumInverseSigma = 0e0 
+    sumFoverSigma = 0e0
+    sumInverseSigma = 0e0
     lb = 2
-    ub = 1 
+    ub = 1
     while wrappedtime(data, lb, P) > data[1].modt - kw
         lb -= 1
         point = access(data, lb)
@@ -103,14 +106,14 @@ function smooth!(data::Vector{Point}, P::Float32, kw::Float32)
             sumFoverSigma -= point.F / point.sigmaF
             sumInverseSigma -= 1e0 / point.sigmaF
             lb += 1
-        end 
+        end
         while wrappedtime(data, ub, P) < data[i].modt + kw
             ub += 1
             point = access(data, ub)
             sumFoverSigma += point.F / point.sigmaF
             sumInverseSigma += 1e0 / point.sigmaF
-        end 
-        data[i] = Point(data[i].t, data[i].modt, data[i].F, data[i].sigmaF, 
+        end
+        data[i] = Point(data[i].t, data[i].modt, data[i].F, data[i].sigmaF,
                         Float32(sumFoverSigma/sumInverseSigma))
     end
 end
@@ -139,17 +142,22 @@ function kurtosis(data::Vector{Point}) :: Float32
 end
 
 "returns dataframe containing chi-squared and kurtosis by period"
-function periodogram(data::Vector{Point}, periods::Vector{Float32}, kw=0.002f0; 
+function periodogram(data::Vector{Point}, periods::Vector{Float32}; kw=0.002f0,
                      parallel=true, datakw=false, postprocess=true)
+    println("beginning of periodogram()")
     df = DataFrame(chi2=Float32[], kurtosis=Float32[])
     s = div(length(periods), nworkers()*3)
     results = pmap(periods, distributed=parallel, batch_size=s) do p
         fold!(p, data)
         row = Vector{Any}()
         if datakw
+            println("trying to run smooth2")
             smooth2!(data, p, kw)
+            println("ran smooth2")
         else
+            println("trying to run smooth")
             smooth!(data, p, kw)
+            println("ran smooth")
         end
         push!(row, chi2(data))
         push!(row, kurtosis(data))
@@ -166,7 +174,7 @@ function aliases(downto::Int=5; upperBound=nothing) :: Vector{Rational}
                 push!(lines, m//n)
             else
                 i = 0
-                while i + m//n < upperBound 
+                while i + m//n < upperBound
                     push!(lines, i + m//n)
                     i += 1
                 end
@@ -176,10 +184,11 @@ function aliases(downto::Int=5; upperBound=nothing) :: Vector{Rational}
     collect(lines)
 end
 
-function flatten(periods::Vector{Float32}, chi2s::Vector{Float32}, stepwidth::Float32=10.21f0;
+function flatten(periods::Vector{Float32}, chi2s::Vector{Float32}; stepwidth::Float32=10.21f0,
                  preflipped=false)
     nchi2s = similar(chi2s)
     steps = Int(ceil(periods[end]/stepwidth))
+    println("completed steps=Int(sckdvjc)")
     for n in 1:steps
         lb = first(searchsorted(periods, (n-1)*stepwidth))
         ub = last(searchsorted(periods, n*stepwidth))
@@ -192,6 +201,7 @@ function flatten(periods::Vector{Float32}, chi2s::Vector{Float32}, stepwidth::Fl
         p = Optim.minimizer(res)
         nchi2s[lb:ub] .= Float32.(line(periods[lb:ub], p) - chi2s[lb:ub])
     end
+    println("completed the for loop")
     if preflipped
         -nchi2s
     else
@@ -218,10 +228,10 @@ function scrambled_periodogram(df::DataFrame, periods::Vector{Float32}; kwargs..
     periodogram(data, periods; kwargs...)
 end
 
-function loguniform_grid(pmin=0.25f0, pmax=5f1; n=5)
+function optimal_periods(;pmin=0.25f0, pmax=5f1, n=5)
     pmin = Float32(pmin)
     pmax = Float32(pmax)
-   exp.((log(pmin) : (0.001f0/n) : log(pmax))) 
+   exp.((log(pmin) : (0.001f0/n) : log(pmax)))
 end
 
 "download FITS data for KIC"
@@ -293,7 +303,7 @@ function interpolate_missing!(df::DataFrame)
             push!(newTimes, t)
         end
     end
-    itp = Interpolations.interpolate((Vector{Float32}(df[:t]),), 
+    itp = Interpolations.interpolate((Vector{Float32}(df[:t]),),
                                      Vector{Float32}(df[:F]), Gridded(Linear()))
     for t in newTimes
         row = [t, itp[t], missing, true]
@@ -308,61 +318,85 @@ returns a DataFrame containing the lightcurve across all quarters for KIC
 with outliers removed and missing and bad   chi2s = chi2(data, periods)points interpolated.
 """
 loadFITS(KIC::Int; kwargs...) = loadFITS(lpad(KIC,9,0); kwargs...)
-function loadFITS(KIC::String; usetimecorr=true, prune_kw=5, prune_threshold=5, 
-                  prune_usephoto=false, usephasmaP=0, cadence="llc", 
-                  nodetrend=false, detrend_kw=2, splitwidth=0.3, trim=true, detrend_with=median, 
-                  quarters=1:16, fitsdir="fitsfiles/", usePDC=true) :: DataFrame
-    filenames = [fitsdir*fn for fn in readdir(fitsdir) 
-                 if contains(fn, KIC) && contains(fn, cadence)] 
+function loadFITS(KIC::String; usetimecorr=true, prune_kw=5, prune_threshold=5,
+                  prune_usephoto=false, usephasmaP=0, cadence="llc",
+                  nodetrend=false, detrend_kw=2, splitwidth=0.3, trim=true, detrend_with=median,
+                  quarters=1:16, fitsdir="fitsfiles/", usePDC=true, TID="") :: DataFrame
+
+    if (TID=="")
+        filenames = [fitsdir*fn for fn in readdir(fitsdir)
+                     if contains(fn, KIC) && contains(fn, cadence)]
+    else
+        fitsdir = "./" * lpad(TID[1:1],3,0) * "/" * TID[2:4] * "/"
+        filenames = [fitsdir*fn for fn in readdir(fitsdir)
+                    if contains(fn, "s_lc")]
+    end
+
     if filenames == []
         return DataFrame()
     end
     dfs = []
+
     for fn in filenames
         f = FITS(fn)
-        quarter = read_key(f[1], "QUARTER")[1]
-        if quarter in quarters
-            df = DataFrame()
-            if usePDC
-                fluxcol = "PDCSAP_FLUX"
-            else
-                fluxcol = "SAP_FLUX"
-            end
-            names = [("TIME", :t), ("TIMECORR", :tcorr), (fluxcol , :F), 
-                     ("PDCSAP_FLUX_ERR", :sigmaF), ("SAP_QUALITY", :QUALITY)]
-            for (oldname, newname) in names
-                df[newname] = [isnan(x) ? missing : x for x in read(f[2], oldname)]
-            end 
-            if usetimecorr
-                df[:t] .+= df[:tcorr]
-            end
-            delete!(df, :tcorr)
-            dropmissing!(df)
-            #remove outliers
-            df = prune(df, prune_threshold, prune_kw, usephoto=prune_usephoto)
-            #drop bad points
-            df = df[df[:QUALITY] .== 0,:]
-            delete!(df, :QUALITY)
-            ts = df[:t]
-            delts = [ts[i+1] - ts[i] for i in 1:(length(ts)-1)]            
-            boundaries = vcat([0], find((dt->dt>splitwidth), delts), [length(ts)])
-            if boundaries == [0,0]
+        df = DataFrame()
+        if usePDC
+            fluxcol = "PDCSAP_FLUX"
+        else
+            fluxcol = "SAP_FLUX"
+        end
+
+        if TID == ""
+            quality = "SAP_QUALITY"
+            quarter = read_key(f[1], "QUARTER")[1]
+        else
+            quality = "QUALITY"
+        end
+
+        if (TID != "") || (quarter in quarters)
+            names = [("TIME", :t), ("TIMECORR", :tcorr), (fluxcol , :F),
+                     ("PDCSAP_FLUX_ERR", :sigmaF), (quality, :QUALITY)]
+        end
+
+        for (oldname, newname) in names
+            df[newname] = [isnan(x) ? missing : x for x in read(f[2], oldname)]
+        end
+        if usetimecorr
+            df[:t] .+= df[:tcorr]
+        end
+        delete!(df, :tcorr)
+        dropmissing!(df)
+        #remove outliers
+        df = prune(df, prune_threshold, prune_kw, usephoto=prune_usephoto)
+        #drop bad points
+        df = df[df[:QUALITY] .== 0,:]
+        delete!(df, :QUALITY)
+
+
+        ts = df[:t]
+        delts = [ts[i+1] - ts[i] for i in 1:(length(ts)-1)]
+        boundaries = vcat([0], find((dt->dt>splitwidth), delts), [length(ts)])
+        if boundaries == [0,0]
+            continue
+        end
+        for i in 1:(length(boundaries)-1)
+            sdf = df[boundaries[i]+1:boundaries[i+1], :]
+            if sdf[end, :t] - sdf[1, :t] < splitwidth
                 continue
             end
-            for i in 1:(length(boundaries)-1)
-                sdf = df[boundaries[i]+1:boundaries[i+1], :]
-                if sdf[end, :t] - sdf[1, :t] < splitwidth
-                    continue
-                end
-                push!(dfs, sdf)
-            end
+            push!(dfs, sdf)
         end
+        push!(dfs, df)
+
         close(f)
     end
+
     #detrend and normalized each segment
     for i in 1:length(dfs)
         dfs[i][:F] = convert(Vector{Float32}, dfs[i][:F])
-        interpolate_missing!(dfs[i])
+        if (TID == "")
+            interpolate_missing!(dfs[i])
+        end
         if usephasmaP != 0
             dfs[i] = phasma(dfs[i], usephasmaP)
         elseif !nodetrend
@@ -374,6 +408,7 @@ function loadFITS(KIC::String; usetimecorr=true, prune_kw=5, prune_threshold=5,
         dfs[i][:sigmaF] ./= m
         dfs[i][:F] .-= 1
     end
+
     if length(dfs) == 0
         return DataFrame()
     elseif length(dfs) == 1
