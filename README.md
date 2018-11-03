@@ -13,7 +13,7 @@ Here is a brief usage example
     
     #here's how you can get a Kepler light curve detrended like we did in the paper
     getFITS(8462852, fitsdir="./") #download FITS files for Boyajian's star to the current directory
-    df = loadFITS(8462852, fitsdir="./") #load all quarters into single data frame, perform ourlier rejection and detrending
+    df = loadFITS(8462852, fitsdir="./") #load all quarters into single data frame, perform outlier rejection and detrending
     data = pointsify(df) #convert to data type taken by periodogram()
 
     #Here's how to prep arbitary data
@@ -22,7 +22,7 @@ Here is a brief usage example
     sigmaF = ... # array of 1-sigma uncertainties
     data = Point.(t, F, sigmaF) #this constructs an array of Points with Julia's broadcast syntax
 
-    periods = optimal_periods(pmin=0.25, pmax=50) #construct array of periods used in paper.  Any array of Float32's will do.
+    periods = optimal_periods(0.25, 50) #construct array of periods used in paper.  Any array of Float32's will do.
     output = periodogram(data, periods, parallel=true) #construct a DataFrame containing the chi-squared and kurtosis values for each period
                                                        #if you want to parallelize, start Julia with "julia -n <number of cores>"
     
@@ -31,12 +31,10 @@ Here is a brief usage example
 
     null_output = scrambled_periodogram(data, periods)
     null_output[:delt_chi2] = flatten(null_output[:chi2], periods)
-    sigma = movingstd((null_output[:kurtosis] .- 3) .* (null_output[:delt_chi2])
+    sigma = movingstd((null_output[:kurtosis] .- 3) .* (null_output[:delt_chi2]))
 
     output[:zeta] = (output[:kurtosis] .- 3) .* output[:delt_chi2] ./ sigma
 
     #plot the periodogram
     using PyPlot
     plot(periods, output[:zeta])
-
-    
