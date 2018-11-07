@@ -22,13 +22,13 @@ module WeirdDetector
     to an array of `Points`
     """
     function pointsify(df; keep_interpolated::Bool=false, tess::Bool=false) :: Vector{Point}
-        if !tess
+#        if !tess
             if keep_interpolated
                 df[df[:interpolated] .== true, :sigmaF] = mean(df[df[:interpolated] .== false, :sigmaF])
             else
                 df = df[df[:interpolated] .== false, :]
             end
-        end
+#        end
         Point.((df[:t]), (df[:F]), (df[:sigmaF]))
     end
 
@@ -293,7 +293,7 @@ module WeirdDetector
     end
 
     "Interpolate missing points from LC.  This is a helper function for loadFITS"
-    function interpolate_missing!(df::DataFrame)
+    function interpolate_missing!(df::DataFrame; tess::Bool=false)
         #collect points to interpolate
         df[:interpolated] = false
         newTimes = Vector{Float64}()
@@ -309,7 +309,11 @@ module WeirdDetector
         itp = Interpolations.interpolate((Vector{Float32}(df[:t]),),
                                          Vector{Float32}(df[:F]), Gridded(Linear()))
         for t in newTimes
-            row = [t, itp[t], missing, true]
+            if (!tess)
+                row = [t, itp[t], missing, true]
+            else
+                row = [t, itp[t], -1, true]
+            end
             push!(df, row)
         end
         #sort in interpolated points
@@ -411,9 +415,9 @@ module WeirdDetector
             dfs[i][:F] = convert(Vector{Float32}, dfs[i][:F])
             print(dfs[i])
 
-            if (tic_id == "")
-                interpolate_missing!(dfs[i])
-            end
+#            if (tic_id == "")
+                interpolate_missing!(dfs[i], tess = (tic_id != ""))
+#            end
             if usephasmaP != 0
                 dfs[i] = phasma(dfs[i], usephasmaP)
             elseif !nodetrend
