@@ -21,14 +21,12 @@ module WeirdDetector
     convert a DataFrame in the format returned by `loadFITS`
     to an array of `Points`
     """
-    function pointsify(df; keep_interpolated::Bool=false, tess::Bool=false) :: Vector{Point}
-#        if !tess
-            if keep_interpolated
-                df[df[:interpolated] .== true, :sigmaF] = mean(df[df[:interpolated] .== false, :sigmaF])
-            else
-                df = df[df[:interpolated] .== false, :]
-            end
-#        end
+    function pointsify(df; keep_interpolated::Bool=false) :: Vector{Point}
+        if keep_interpolated
+            df[df[:interpolated] .== true, :sigmaF] = mean(df[df[:interpolated] .== false, :sigmaF])
+        else
+            df = df[df[:interpolated] .== false, :]
+        end
         Point.((df[:t]), (df[:F]), (df[:sigmaF]))
     end
 
@@ -222,11 +220,7 @@ module WeirdDetector
         dropmissing!(df)
         df[:F] = df[randperm(size(df)[1]), :F]
         df[:sigmaF] = df[randperm(size(df)[1]), :sigmaF]
-        if (tess)
-            data = pointsify(df, tess=true)
-        else
-            data = pointsify(df)
-        end
+        data = pointsify(df)
         periodogram(data, periods; kwargs...)
     end
 
@@ -440,5 +434,4 @@ module WeirdDetector
             return vcat(dfs...)
         end
     end
-
 end
