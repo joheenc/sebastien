@@ -238,12 +238,13 @@ module WeirdDetector
 
     "download FITS data for KIC"
     getFITS(KIC::Int; fitsdir="fitsfiles/") = getFITS(lpad(KIC,9,0); fitsdir=fitsdir)
-    function getFITS(KIC::String; fitsdir="fitsfiles/", force=false, TID="")
-        if TID == ""
+    function getFITS(KIC::String; fitsdir="fitsfiles/", force=false, tic_id="")
+        if tic_id == ""
             #info("Dowloading data for KIC $(KIC)")
             ftpfolder = "http://archive.stsci.edu/pub/kepler/lightcurves//" * KIC[1:4] * "/" * KIC * "/"
         else
-            ftpfolder = "http://archive.stsci.edu/missions/tess/ete-6/tid/00/000/00" * TID[1:1] * "/" * TID[2:4]
+            tic_id = lpad(tic_id, 9, 0)
+            ftpfolder = "http://archive.stsci.edu/missions/tess/ete-6/tid/00/000/00" * tic_id[1:1] * "/" * tic_id[2:4] * "/tess2019128220341-" * lpad(tic_id,16,0) * "-0016-s_lc.fits"
         end
         command = `wget -P $fitsdir -nH --cut-dirs=6 -r -c -N -np -q -R '*.tar' -R 'index*' -erobots=off $ftpfolder`
         run(command)
@@ -323,15 +324,16 @@ module WeirdDetector
     function loadFITS(KIC::String; usetimecorr=true, prune_kw=5, prune_threshold=5,
                       prune_usephoto=false, usephasmaP=0, cadence="llc",
                       nodetrend=false, detrend_kw=2, splitwidth=0.3, trim=true, detrend_with=median,
-                      quarters=1:16, fitsdir="fitsfiles/", usePDC=true, TID="") :: DataFrame
+                      quarters=1:16, fitsdir="fitsfiles/", usePDC=true, tic_id="") :: DataFrame
 
-        if (TID=="")
+        if (tic_id=="")
             filenames = [fitsdir*fn for fn in readdir(fitsdir)
                          if contains(fn, KIC) && contains(fn, cadence)]
         else
-            fitsdir = "./" * lpad(TID[1:1],3,0) * "/" * TID[2:4] * "/"
+            tic_id = lpad(tic_id, 16, 0)
+            fitsdir = "./" * tic_id[6:8] * "/" * tic_id[9:11] * "/"
             filenames = [fitsdir*fn for fn in readdir(fitsdir)
-                        if contains(fn, "s_lc")]
+                        if contains(fn, tic_id) && contains(fn, "-s_lc")]
         end
 
         if filenames == []
@@ -342,21 +344,21 @@ module WeirdDetector
         for fn in filenames
             f = FITS(fn)
             quarter = 0
-            if TID == ""
+            if tic_id == ""
                 quality = "SAP_QUALITY"
                 quarter = read_key(f[1], "QUARTER")[1]
             else
                 quality = "QUALITY"
             end
 
-            if (TID != "") || (quarter in quarters)
+            if (tic_id != "") || (quarter in quarters)
                 df = DataFrame()
                 fluxerrcol = "PDCSAP_FLUX_ERR"
                 if usePDC
                     fluxcol = "PDCSAP_FLUX"
                 else
                     fluxcol = "SAP_FLUX"
-                    if (TID != "")
+                    if (tic_id != "")
                         fluxerrcol = "SAP_FLUX_ERR"
                     end
                 end
@@ -382,7 +384,7 @@ module WeirdDetector
 
                 print(df)
 
-                if (TID == "")
+                if (tic_id == "")
                     ts = df[:t]
                     delts = [ts[i+1] - ts[i] for i in 1:(length(ts)-1)]
                     boundaries = vcat([0], find((dt->dt>splitwidth), delts), [length(ts)])
@@ -409,7 +411,7 @@ module WeirdDetector
             dfs[i][:F] = convert(Vector{Float32}, dfs[i][:F])
             print(dfs[i])
 
-            if (TID == "")
+            if (tic_id == "")
                 interpolate_missing!(dfs[i])
             end
             if usephasmaP != 0
