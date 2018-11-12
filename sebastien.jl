@@ -382,23 +382,21 @@ module WeirdDetector
 
                 print(df)
 
-                if (tic_id == "")
-                    ts = df[:t]
-                    delts = [ts[i+1] - ts[i] for i in 1:(length(ts)-1)]
-                    boundaries = vcat([0], find((dt->dt>splitwidth), delts), [length(ts)])
-                    if boundaries == [0,0]
+
+                ts = df[:t]
+                delts = [ts[i+1] - ts[i] for i in 1:(length(ts)-1)]
+                boundaries = vcat([0], find((dt->dt>splitwidth), delts), [length(ts)])
+                if boundaries == [0,0]
+                    continue
+                end
+                for i in 1:(length(boundaries)-1)
+                    sdf = df[boundaries[i]+1:boundaries[i+1], :]
+                    if sdf[end, :t] - sdf[1, :t] < splitwidth
                         continue
                     end
-                    for i in 1:(length(boundaries)-1)
-                        sdf = df[boundaries[i]+1:boundaries[i+1], :]
-                        if sdf[end, :t] - sdf[1, :t] < splitwidth
-                            continue
-                        end
-                        print(sdf)
-                        push!(dfs, sdf)
-                    end
-                else
-                    push!(dfs, df)
+                    print("sdf:")
+                    print(sdf)
+                    push!(dfs, sdf)
                 end
             end
             close(f)
