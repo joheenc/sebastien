@@ -224,7 +224,7 @@ module WeirdDetector
         periodogram(data, periods; kwargs...)
     end
 
-    function optimal_periods(;pmin=0.25f0, pmax=5f1, n=5)
+    function optimal_periods(pmin=0.25f0, pmax=5f1; n=5)
         pmin = Float32(pmin)
         pmax = Float32(pmax)
        exp.((log(pmin) : (0.001f0/n) : log(pmax)))
@@ -409,9 +409,11 @@ module WeirdDetector
             dfs[i][:F] = convert(Vector{Float32}, dfs[i][:F])
             print(dfs[i])
 
-#            if (tic_id == "")
-                interpolate_missing!(dfs[i], tess = (tic_id != ""))
-#            end
+            if (tic_id == "")
+                interpolate_missing!(dfs[i])
+            else
+                interpolate_missing!(dfs[i], tess = true)
+            end
             if usephasmaP != 0
                 dfs[i] = phasma(dfs[i], usephasmaP)
             elseif !nodetrend
