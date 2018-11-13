@@ -224,7 +224,7 @@ module WeirdDetector
         periodogram(data, periods; kwargs...)
     end
 
-    function optimal_periods(pmin=0.25f0, pmax=5f1; n=5)
+    function optimal_periods(pmin=0.25f0, pmax=5f1; n=6)
         pmin = Float32(pmin)
         pmax = Float32(pmax)
        exp.((log(pmin) : (0.001f0/n) : log(pmax)))
@@ -292,6 +292,9 @@ module WeirdDetector
         df[:interpolated] = false
         newTimes = Vector{Float64}()
         dt = 0.020416 #kepler cadence in days
+        if (tess)
+            dt = 0.000694444 #tess cadence in days
+        end
         epsilon = 0.005
         for i in 2:size(df,1)
             t = df[i-1, :t]
@@ -366,8 +369,6 @@ module WeirdDetector
                      df[newname] = [isnan(x) ? missing : x for x in read(f[2], oldname)]
                 end
 
-                print(df)
-
                 if usetimecorr
                     df[:t] .+= df[:tcorr]
                 end
@@ -379,8 +380,6 @@ module WeirdDetector
                 #drop bad points
                 df = df[df[:QUALITY] .== 0,:]
                 delete!(df, :QUALITY)
-
-                print(df)
 
 
                 ts = df[:t]
@@ -394,8 +393,6 @@ module WeirdDetector
                     if sdf[end, :t] - sdf[1, :t] < splitwidth
                         continue
                     end
-                    print("sdf:")
-                    print(sdf)
                     push!(dfs, sdf)
                 end
             end
@@ -405,7 +402,6 @@ module WeirdDetector
         #detrend and normalize each segment
         for i in 1:length(dfs)
             dfs[i][:F] = convert(Vector{Float32}, dfs[i][:F])
-            print(dfs[i])
 
             if (tic_id == "")
                 interpolate_missing!(dfs[i])
@@ -424,7 +420,6 @@ module WeirdDetector
             dfs[i][:F] .-= 1
         end
 
-        print(dfs)
         if length(dfs) == 0
             return DataFrame()
         elseif length(dfs) == 1
