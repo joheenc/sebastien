@@ -22,9 +22,11 @@ Here is a brief usage example
     sigmaF = ... # array of 1-sigma uncertainties
     data = Point.(t, F, sigmaF) #this constructs an array of Points with Julia's broadcast syntax
 
-    periods = optimal_periods(0.25, 50) #construct array of periods used in paper.  Any array of Float32's will do.
-    output = periodogram(data, periods, parallel=true) #construct a DataFrame containing the chi-squared and kurtosis values for each period
-                                                       #if you want to parallelize, start Julia with "julia -n <number of cores>"
+    #construct array of periods used in paper.  Any array of Float32's can be used instead.
+    periods = optimal_periods(2.0, 50.0)
+    #construct a DataFrame containing the chi-squared and kurtosis values for each period
+    #if you want to parallelize, start Julia with "julia -n <number of cores>"
+    output = periodogram(data, periods, parallel=true) 
     
     #do some postprocessing 
     output[:delt_chi2] = flatten(output[:chi2], periods) #calculate \Delta \chi^2 (see equation N)
