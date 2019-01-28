@@ -332,7 +332,7 @@ module WeirdDetector
                          if contains(fn, KIC) && contains(fn, cadence)]
         else
             tic_id = lpad(tic_id, 16, 0)
-            fitsdir = "./" * tic_id[6:8] * "/" * tic_id[9:11] * "/"
+            fitsdir = fitsdir * "/" * tic_id[6:8] * "/" * tic_id[9:11] * "/"
             filenames = [fitsdir*fn for fn in readdir(fitsdir)
                         if contains(fn, tic_id) && contains(fn, "-s_lc")]
         end
