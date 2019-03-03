@@ -4,6 +4,9 @@ module WeirdDetector
     using DataFrames
     using FITSIO
     using Optim
+    using Statistics
+    using Distributed
+    using Random
 
     export Point, periodogram, aliases, optimal_periods, getFITS, loadFITS, pointsify, flatten, scrambled_periodogram, movingstd
 
@@ -25,7 +28,7 @@ module WeirdDetector
         if keep_interpolated
             df[df[:interpolated] .== true, :sigmaF] = mean(df[df[:interpolated] .== false, :sigmaF])
         else
-            df = df[df[:interpolated] .== false, :]
+           df = df[df[:interpolated] .== false, :]
         end
         Point.((df[:t]), (df[:F]), (df[:sigmaF]))
     end
@@ -217,7 +220,7 @@ module WeirdDetector
 
     function scrambled_periodogram(df::DataFrame, periods::Vector{Float32}; tess=false, kwargs...)
         df = deepcopy(df)
-        dropmissing!(df)
+        dropmissing!(df, :F, disallowmissing=false)
         df[:F] = df[randperm(size(df)[1]), :F]
         df[:sigmaF] = df[randperm(size(df)[1]), :sigmaF]
         data = pointsify(df)
@@ -232,13 +235,17 @@ module WeirdDetector
 
     "download FITS data for KIC"
     getFITS(KIC::Int; fitsdir="fitsfiles/") = getFITS(lpad(KIC,9,0); fitsdir=fitsdir)
-    function getFITS(KIC::String; fitsdir="fitsfiles/", force=false, tic_id="")
+    function getFITS(KIC::String; fitsdir="fitsfiles/", force=false, tic_id="", ete6=false)
         if tic_id == ""
             #info("Dowloading data for KIC $(KIC)")
             ftpfolder = "http://archive.stsci.edu/pub/kepler/lightcurves//" * KIC[1:4] * "/" * KIC * "/"
-        else
+        elseif ete6
             tic_id = lpad(tic_id, 9, 0)
             ftpfolder = "http://archive.stsci.edu/missions/tess/ete-6/tid/00/000/00" * tic_id[1:1] * "/" * tic_id[2:4] * "/tess2019128220341-" * lpad(tic_id,16,0) * "-0016-s_lc.fits"
+        else
+            tic_id = lpad(tic_id, 9, 0)     #good for sector 1 data only
+            sector = lpad(sector, 2, 0)
+            ftpfolder = "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/tess2018206045859-s0001-" * lpad(tic_id,16,0) * "-0120-s_lc.fits"
         end
         command = `wget -P $fitsdir -nH --cut-dirs=6 -r -c -N -np -q -R '*.tar' -R 'index*' -erobots=off $ftpfolder`
         run(command)
@@ -272,7 +279,7 @@ module WeirdDetector
         fs = 60*24 / 29.4 #sampling frequency [days^-1]
         kw = Int(round(P*fs/2))
         nrows = size(df, 1)
-        smoothedF = Vector{Float32}(nrows)
+        smoothedF = Vector{Float32}(undef, nrows)
         for i in 1:nrows
             lb = i-kw < 1 ? 1 : i-kw
             ub = i+kw < nrows ? i+kw : nrows
@@ -307,9 +314,9 @@ module WeirdDetector
                                          Vector{Float32}(df[:F]), Gridded(Linear()))
         for t in newTimes
             if (!tess)
-                row = [t, itp[t], missing, true]
+                row = [t, itp(t), missing, true]
             else
-                row = [t, itp[t], -1, true]
+                row = [t, itp(t), -1, true]
             end
             push!(df, row)
         end
@@ -321,22 +328,30 @@ module WeirdDetector
     returns a DataFrame containing the lightcurve across all quarters for KIC
     with outliers removed and missing and bad chi2s = chi2(data, periods) points interpolated.
     """
-    loadFITS(KIC::Int; kwargs...) = loadFITS(lpad(KIC,9,0); kwargs...)
-    function loadFITS(KIC::String; usetimecorr=true, prune_kw=5, prune_threshold=5,
+    loadFITS(KIC::Int; kwargs...) = loadFITS(lpad(string(KIC),9,"0"); kwargs...)
+    function loadFITS(KIC::String; usetimecorr=true, prune_kw=5, prune_theshold=5,
                       prune_usephoto=false, usephasmaP=0, cadence="llc",
                       nodetrend=false, detrend_kw=2, splitwidth=0.3, trim=true, detrend_with=median,
-                      quarters=1:16, fitsdir="fitsfiles/", usePDC=true, tic_id="") :: DataFrame
+                      quarters=1:16, fitsdir="fitsfiles/", usePDC=true, tic_id="", ete6=false) :: DataFrame
 
+	filenames = []
+	
         if (tic_id=="")
             filenames = [fitsdir*fn for fn in readdir(fitsdir)
-                         if contains(fn, KIC) && contains(fn, cadence)]
-        else
-            tic_id = lpad(tic_id, 16, 0)
+                         if occursin(KIC, fn) && occursin(cadence, fn)]
+        elseif ete6
+            tic_id = lpad(tic_id, 16, "0")
             fitsdir = fitsdir * "/" * tic_id[6:8] * "/" * tic_id[9:11] * "/"
             filenames = [fitsdir*fn for fn in readdir(fitsdir)
-                        if contains(fn, tic_id) && contains(fn, "-s_lc")]
+                        if occursin(tic_id, fn) && occursin("-s_lc", fn)]
+        else
+            tic_id = lpad(tic_id, 16, "0")
+	    for fn in readdir(fitsdir)
+		if occursin(tic_id, fn) && occursin("-s_lc", fn)
+			filenames = [fitsdir*fn]
+		end
+	    end
         end
-
         if filenames == []
             return DataFrame()
         end
@@ -372,19 +387,19 @@ module WeirdDetector
                 if usetimecorr
                     df[:t] .+= df[:tcorr]
                 end
-                delete!(df, :tcorr)
-                dropmissing!(df)
+                deletecols!(df, :tcorr)
+                dropmissing!(df, :F, disallowmissing=false)
 
                 #remove outliers
-                df = prune(df, prune_threshold, prune_kw, usephoto=prune_usephoto)
+                df = prune(df, 5, 5, usephoto=false)
                 #drop bad points
                 df = df[df[:QUALITY] .== 0,:]
-                delete!(df, :QUALITY)
+                deletecols!(df, :QUALITY)
 
 
                 ts = df[:t]
                 delts = [ts[i+1] - ts[i] for i in 1:(length(ts)-1)]
-                boundaries = vcat([0], find((dt->dt>splitwidth), delts), [length(ts)])
+                boundaries = vcat([0], findall((dt->dt>splitwidth), delts), [length(ts)])
                 if boundaries == [0,0]
                     continue
                 end
