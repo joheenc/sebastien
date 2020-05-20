@@ -221,8 +221,10 @@ module WeirdDetector
     function scrambled_periodogram(df::DataFrame, periods::Vector{Float32}; tess=false, kwargs...)
         df = deepcopy(df)
         dropmissing!(df, :F, disallowmissing=false)
-        df[:F] = df[randperm(size(df)[1]), :F]
-        df[:sigmaF] = df[randperm(size(df)[1]), :sigmaF]
+	rand = randperm(size(df)[1])
+	df[:F] = df[rand, :F]
+	df[:sigmaF] = df[rand, :sigmaF]
+	df[:interpolated] = df[rand, :interpolated]
         data = pointsify(df)
         periodogram(data, periods; kwargs...)
     end
