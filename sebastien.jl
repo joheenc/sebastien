@@ -198,8 +198,12 @@ module WeirdDetector
                 nchi2s[lb:ub] .= Float32.(line(periods[lb:ub], p) - chi2s[lb:ub])
             end
         else
-            medianchi2s = fill(median(chi2s), length(chi2s))
-            nchi2s = medianchi2s - chi2s
+	    kw = 200
+	    for n in 1:length(chi2s)
+		lb = n - kw < 1 ? 1 : n - kw
+		ub = n + kw > length(chi2s) ? length(chi2s) : n + kw
+		med = median(chi2s[lb:ub])
+		nchi2s[n] = med - chi2s[n]
         end
         if preflipped
             -nchi2s
